@@ -228,9 +228,9 @@ function err {
     xtrace=$(set +o | grep xtrace)
     set +o xtrace
     local msg="[ERROR] ${BASH_SOURCE[2]}:$1 $2"
-    echo $msg 1>&2;
+    echo "$msg" 1>&2;
     if [[ -n ${LOGDIR} ]]; then
-        echo $msg >> "${LOGDIR}/error.log"
+        echo "$msg" >> "${LOGDIR}/error.log"
     fi
     $xtrace
     return $exitcode
@@ -283,7 +283,7 @@ function warn {
     xtrace=$(set +o | grep xtrace)
     set +o xtrace
     local msg="[WARNING] ${BASH_SOURCE[2]}:$1 $2"
-    echo $msg
+    echo "$msg"
     $xtrace
     return $exitcode
 }
@@ -374,8 +374,10 @@ function GetDistro {
     elif [[ "$os_VENDOR" =~ (openSUSE) ]]; then
         DISTRO="opensuse-$os_RELEASE"
         # Tumbleweed uses "n/a" as a codename, and the release is a datestring
-        # like 20180218, so not very useful.
-        [ "$os_CODENAME" = "n/a" ] && DISTRO="opensuse-tumbleweed"
+        # like 20180218, so not very useful. Leap however uses a release
+        # with a "dot", so for example 15.0
+        [ "$os_CODENAME" = "n/a" -a "$os_RELEASE" = "${os_RELEASE/\./}" ] && \
+            DISTRO="opensuse-tumbleweed"
     elif [[ "$os_VENDOR" =~ (SUSE LINUX) ]]; then
         # just use major release
         DISTRO="sle${os_RELEASE%.*}"
@@ -1376,7 +1378,7 @@ function zypper_install {
     [[ "$(id -u)" = "0" ]] && sudo="env"
     $sudo http_proxy="${http_proxy:-}" https_proxy="${https_proxy:-}" \
         no_proxy="${no_proxy:-}" \
-        zypper --non-interactive install --auto-agree-with-licenses "$@"
+        zypper --non-interactive install --auto-agree-with-licenses --no-recommends "$@"
 }
 
 function write_user_unit_file {
@@ -1439,24 +1441,24 @@ function _common_systemd_pitfalls {
     # do some sanity checks on $cmd to see things we don't expect to work
 
     if [[ "$cmd" =~ "sudo" ]]; then
-        local msg=<<EOF
+        read -r -d '' msg << EOF || true  # read returns 1 for EOF, but it is ok here
 You are trying to use run_process with sudo, this is not going to work under systemd.
 
-If you need to run a service as a user other than $STACK_USER call it with:
+If you need to run a service as a user other than \$STACK_USER call it with:
 
    run_process \$name \$cmd \$group \$user
 EOF
-        die $LINENO $msg
+        die $LINENO "$msg"
     fi
 
     if [[ ! "$cmd" =~ ^/ ]]; then
-        local msg=<<EOF
+        read -r -d '' msg << EOF || true  # read returns 1 for EOF, but it is ok here
 The cmd="$cmd" does not start with an absolute path. It will fail to
 start under systemd.
 
 Please update your run_process stanza to have an absolute path.
 EOF
-        die $LINENO $msg
+        die $LINENO "$msg"
     fi
 
 }
