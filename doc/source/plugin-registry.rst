@@ -65,6 +65,7 @@ freezer-web-ui                         `git://git.openstack.org/openstack/freeze
 gce-api                                `git://git.openstack.org/openstack/gce-api <https://git.openstack.org/cgit/openstack/gce-api>`__
 glare                                  `git://git.openstack.org/openstack/glare <https://git.openstack.org/cgit/openstack/glare>`__
 group-based-policy                     `git://git.openstack.org/openstack/group-based-policy <https://git.openstack.org/cgit/openstack/group-based-policy>`__
+gyan                                   `git://git.openstack.org/openstack/gyan <https://git.openstack.org/cgit/openstack/gyan>`__
 heat                                   `git://git.openstack.org/openstack/heat <https://git.openstack.org/cgit/openstack/heat>`__
 heat-dashboard                         `git://git.openstack.org/openstack/heat-dashboard <https://git.openstack.org/cgit/openstack/heat-dashboard>`__
 horizon-mellanox                       `git://git.openstack.org/openstack/horizon-mellanox <https://git.openstack.org/cgit/openstack/horizon-mellanox>`__
@@ -171,6 +172,7 @@ solum                                  `git://git.openstack.org/openstack/solum 
 stackube                               `git://git.openstack.org/openstack/stackube <https://git.openstack.org/cgit/openstack/stackube>`__
 storlets                               `git://git.openstack.org/openstack/storlets <https://git.openstack.org/cgit/openstack/storlets>`__
 stx-config                             `git://git.openstack.org/openstack/stx-config <https://git.openstack.org/cgit/openstack/stx-config>`__
+stx-fault                              `git://git.openstack.org/openstack/stx-fault <https://git.openstack.org/cgit/openstack/stx-fault>`__
 tacker                                 `git://git.openstack.org/openstack/tacker <https://git.openstack.org/cgit/openstack/tacker>`__
 tap-as-a-service                       `git://git.openstack.org/openstack/tap-as-a-service <https://git.openstack.org/cgit/openstack/tap-as-a-service>`__
 tap-as-a-service-dashboard             `git://git.openstack.org/openstack/tap-as-a-service-dashboard <https://git.openstack.org/cgit/openstack/tap-as-a-service-dashboard>`__
