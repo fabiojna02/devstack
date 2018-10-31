@@ -27,7 +27,6 @@ Plugin Name                            URL
 almanach                               `git://git.openstack.org/openstack/almanach <https://git.openstack.org/cgit/openstack/almanach>`__
 aodh                                   `git://git.openstack.org/openstack/aodh <https://git.openstack.org/cgit/openstack/aodh>`__
 apmec                                  `git://git.openstack.org/openstack/apmec <https://git.openstack.org/cgit/openstack/apmec>`__
-astara                                 `git://git.openstack.org/openstack/astara <https://git.openstack.org/cgit/openstack/astara>`__
 barbican                               `git://git.openstack.org/openstack/barbican <https://git.openstack.org/cgit/openstack/barbican>`__
 bilean                                 `git://git.openstack.org/openstack/bilean <https://git.openstack.org/cgit/openstack/bilean>`__
 blazar                                 `git://git.openstack.org/openstack/blazar <https://git.openstack.org/cgit/openstack/blazar>`__
@@ -173,6 +172,7 @@ stackube                               `git://git.openstack.org/openstack/stacku
 storlets                               `git://git.openstack.org/openstack/storlets <https://git.openstack.org/cgit/openstack/storlets>`__
 stx-config                             `git://git.openstack.org/openstack/stx-config <https://git.openstack.org/cgit/openstack/stx-config>`__
 stx-fault                              `git://git.openstack.org/openstack/stx-fault <https://git.openstack.org/cgit/openstack/stx-fault>`__
+stx-update                             `git://git.openstack.org/openstack/stx-update <https://git.openstack.org/cgit/openstack/stx-update>`__
 tacker                                 `git://git.openstack.org/openstack/tacker <https://git.openstack.org/cgit/openstack/tacker>`__
 tap-as-a-service                       `git://git.openstack.org/openstack/tap-as-a-service <https://git.openstack.org/cgit/openstack/tap-as-a-service>`__
 tap-as-a-service-dashboard             `git://git.openstack.org/openstack/tap-as-a-service-dashboard <https://git.openstack.org/cgit/openstack/tap-as-a-service-dashboard>`__
