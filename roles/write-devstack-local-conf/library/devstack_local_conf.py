@@ -155,8 +155,8 @@ class PluginGraph(DependencyGraph):
                 continue
             self.loadDevstackPluginInfo(settings)
 
-    define_re = re.compile(r'^define_plugin\s+(\w+).*')
-    require_re = re.compile(r'^plugin_requires\s+(\w+)\s+(\w+).*')
+    define_re = re.compile(r'^define_plugin\s+(\S+).*')
+    require_re = re.compile(r'^plugin_requires\s+(\S+)\s+(\S+).*')
     def loadDevstackPluginInfo(self, fn):
         name = None
         reqs = set()
@@ -207,18 +207,23 @@ class PluginGraph(DependencyGraph):
 class LocalConf(object):
 
     def __init__(self, localrc, localconf, base_services, services, plugins,
-                 base_dir, projects, project):
+                 base_dir, projects, project, tempest_plugins):
         self.localrc = []
+        self.warnings = []
         self.meta_sections = {}
         self.plugin_deps = {}
         self.base_dir = base_dir
         self.projects = projects
         self.project = project
-        if plugins:
-            self.handle_plugins(plugins)
+        self.tempest_plugins = tempest_plugins
         if services or base_services:
             self.handle_services(base_services, services or {})
         self.handle_localrc(localrc)
+        # Plugins must be the last items in localrc, otherwise
+        # the configuration lines which follows them in the file are
+        # not applied to the plugins (for example, the value of DEST.)
+        if plugins:
+            self.handle_plugins(plugins)
         if localconf:
             self.handle_localconf(localconf)
 
@@ -243,12 +248,19 @@ class LocalConf(object):
 
     def handle_localrc(self, localrc):
         lfg = False
+        tp = False
         if localrc:
             vg = VarGraph(localrc)
             for k, v in vg.getVars():
-                self.localrc.append('{}={}'.format(k, v))
+                # Avoid double quoting
+                if len(v) and v[0]=='"':
+                    self.localrc.append('{}={}'.format(k, v))
+                else:
+                    self.localrc.append('{}="{}"'.format(k, v))
                 if k == 'LIBS_FROM_GIT':
                     lfg = True
+                elif k == 'TEMPEST_PLUGINS':
+                    tp = True
 
         if not lfg and (self.projects or self.project):
             required_projects = []
@@ -262,6 +274,19 @@ class LocalConf(object):
             if required_projects:
                 self.localrc.append('LIBS_FROM_GIT={}'.format(
                     ','.join(required_projects)))
+
+        if self.tempest_plugins:
+            if not tp:
+                tp_dirs = []
+                for tempest_plugin in self.tempest_plugins:
+                    tp_dirs.append(os.path.join(self.base_dir, tempest_plugin))
+                self.localrc.append('TEMPEST_PLUGINS="{}"'.format(
+                        ' '.join(tp_dirs)))
+            else:
+                self.warnings.append('TEMPEST_PLUGINS already defined ({}),'
+                                     'requested value {} ignored'.format(
+                                         tp, self.tempest_plugins))
+
 
     def handle_localconf(self, localconf):
         for phase, phase_data in localconf.items():
@@ -297,6 +322,7 @@ def main():
             path=dict(type='str'),
             projects=dict(type='dict'),
             project=dict(type='dict'),
+            tempest_plugins=dict(type='list'),
         )
     )
 
@@ -308,10 +334,11 @@ def main():
                    p.get('plugins'),
                    p.get('base_dir'),
                    p.get('projects'),
-                   p.get('project'))
+                   p.get('project'),
+                   p.get('tempest_plugins'))
     lc.write(p['path'])
 
-    module.exit_json()
+    module.exit_json(warnings=lc.warnings)
 
 
 try:

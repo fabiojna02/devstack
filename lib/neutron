@@ -33,7 +33,7 @@ GITDIR["python-neutronclient"]=$DEST/python-neutronclient
 # - True : Run neutron under uwsgi
 # TODO(annp): Switching to uwsgi in next cycle if things turn out to be stable
 # enough
-NEUTRON_DEPLOY_MOD_WSGI=${NEUTRON_DEPLOY_MOD_WSGI:-False}
+NEUTRON_DEPLOY_MOD_WSGI=$(trueorfalse False NEUTRON_DEPLOY_MOD_WSGI)
 NEUTRON_AGENT=${NEUTRON_AGENT:-openvswitch}
 NEUTRON_DIR=$DEST/neutron
 NEUTRON_AUTH_CACHE_DIR=${NEUTRON_AUTH_CACHE_DIR:-/var/cache/neutron}
@@ -95,9 +95,6 @@ NEUTRON_ROOTWRAP_CONF_FILE=$NEUTRON_CONF_DIR/rootwrap.conf
 NEUTRON_ROOTWRAP_CMD="$NEUTRON_ROOTWRAP $NEUTRON_ROOTWRAP_CONF_FILE"
 NEUTRON_ROOTWRAP_DAEMON_CMD="$NEUTRON_ROOTWRAP-daemon $NEUTRON_ROOTWRAP_CONF_FILE"
 
-# This is needed because _neutron_ovs_base_configure_l3_agent will set
-# external_network_bridge
-Q_USE_PROVIDERNET_FOR_PUBLIC=${Q_USE_PROVIDERNET_FOR_PUBLIC:-True}
 # This is needed because _neutron_ovs_base_configure_l3_agent uses it to create
 # an external network bridge
 PUBLIC_BRIDGE=${PUBLIC_BRIDGE:-br-ex}
@@ -120,7 +117,9 @@ function is_neutron_enabled {
 # Test if any Neutron services are enabled
 # is_neutron_enabled
 function is_neutron_legacy_enabled {
-    [[ ,${DISABLED_SERVICES} =~ ,"neutron" ]] && return 1
+    # first we need to remove all "neutron-" from DISABLED_SERVICES list
+    disabled_services_copy=$(echo $DISABLED_SERVICES | sed 's/neutron-//g')
+    [[ ,${disabled_services_copy} =~ ,"neutron" ]] && return 1
     [[ ,${ENABLED_SERVICES} =~ ,"q-" ]] && return 0
     return 1
 }
@@ -183,9 +182,14 @@ function configure_neutron_new {
     # Neutron API server & Neutron plugin
     if is_service_enabled neutron-api; then
         local policy_file=$NEUTRON_CONF_DIR/policy.json
-        cp $NEUTRON_DIR/etc/policy.json $policy_file
         # Allow neutron user to administer neutron to match neutron account
-        sed -i 's/"context_is_admin":  "role:admin"/"context_is_admin":  "role:admin or user_name:neutron"/g' $policy_file
+        # NOTE(amotoki): This is required for nova works correctly with neutron.
+        if [ -f $NEUTRON_DIR/etc/policy.json ]; then
+            cp $NEUTRON_DIR/etc/policy.json $policy_file
+            sed -i 's/"context_is_admin":  "role:admin"/"context_is_admin":  "role:admin or user_name:neutron"/g' $policy_file
+        else
+            echo '{"context_is_admin":  "role:admin or user_name:neutron"}' > $policy_file
+        fi
 
         cp $NEUTRON_DIR/etc/api-paste.ini $NEUTRON_CONF_DIR/api-paste.ini
 

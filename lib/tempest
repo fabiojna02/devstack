@@ -102,6 +102,14 @@ function remove_disabled_extensions {
     remove_disabled_services "$extensions_list" "$disabled_exts"
 }
 
+# image_size_in_gib - converts an image size from bytes to GiB, rounded up
+# Takes an image ID parameter as input
+function image_size_in_gib {
+    local size
+    size=$(openstack image show $1 -c size -f value)
+    echo $size | python -c "import math; import six; print(int(math.ceil(float(int(six.moves.input()) / 1024.0 ** 3))))"
+}
+
 # configure_tempest() - Set config files, create data dirs, etc
 function configure_tempest {
     if [[ "$INSTALL_TEMPEST" == "True" ]]; then
@@ -125,6 +133,7 @@ function configure_tempest {
     local public_network_id
     local public_router_id
     local ssh_connect_method="floating"
+    local disk
 
     # Save IFS
     ifs=$IFS
@@ -190,11 +199,15 @@ function configure_tempest {
         available_flavors=$(nova flavor-list)
         if  [[ -z "$DEFAULT_INSTANCE_TYPE" ]]; then
             if [[ ! ( $available_flavors =~ 'm1.nano' ) ]]; then
-                openstack flavor create --id 42 --ram 64 --disk 0 --vcpus 1 m1.nano
+                # Determine the flavor disk size based on the image size.
+                disk=$(image_size_in_gib $image_uuid)
+                openstack flavor create --id 42 --ram 64 --disk $disk --vcpus 1 m1.nano
             fi
             flavor_ref=42
             if [[ ! ( $available_flavors =~ 'm1.micro' ) ]]; then
-                openstack flavor create --id 84 --ram 128 --disk 0 --vcpus 1 m1.micro
+                # Determine the alt flavor disk size based on the alt image size.
+                disk=$(image_size_in_gib $image_uuid_alt)
+                openstack flavor create --id 84 --ram 128 --disk $disk --vcpus 1 m1.micro
             fi
             flavor_ref_alt=84
         else
@@ -242,6 +255,9 @@ function configure_tempest {
     # and the public_network_id should not be set.
     if [[ "$NEUTRON_CREATE_INITIAL_NETWORKS" == "True" ]] && is_networking_extension_supported 'external-net'; then
         public_network_id=$(openstack network show -f value -c id $PUBLIC_NETWORK_NAME)
+        # make sure shared network presence does not confuses the tempest tests
+        openstack network create --share shared
+        openstack subnet create --description shared-subnet --subnet-range ${TEMPEST_SHARED_POOL:-192.168.233.0/24} --network shared shared-subnet
     fi
 
     iniset $TEMPEST_CONFIG DEFAULT use_syslog $SYSLOG
@@ -263,8 +279,6 @@ function configure_tempest {
     iniset $TEMPEST_CONFIG identity user_lockout_failure_attempts $KEYSTONE_LOCKOUT_FAILURE_ATTEMPTS
     iniset $TEMPEST_CONFIG identity user_lockout_duration $KEYSTONE_LOCKOUT_DURATION
     iniset $TEMPEST_CONFIG identity user_unique_last_password_count $KEYSTONE_UNIQUE_LAST_PASSWORD_COUNT
-    # Use domain scoped tokens for admin v3 tests, v3 dynamic credentials of v3 account generation
-    iniset $TEMPEST_CONFIG identity admin_domain_scope True
     if [[ "$TEMPEST_HAS_ADMIN" == "True" ]]; then
         iniset $TEMPEST_CONFIG auth admin_username $admin_username
         iniset $TEMPEST_CONFIG auth admin_password "$password"
@@ -372,6 +386,11 @@ function configure_tempest {
     iniset $TEMPEST_CONFIG compute-feature-enabled block_migration_for_live_migration ${USE_BLOCK_MIGRATION_FOR_LIVE_MIGRATION:-False}
     iniset $TEMPEST_CONFIG compute-feature-enabled live_migrate_back_and_forth ${LIVE_MIGRATE_BACK_AND_FORTH:-False}
     iniset $TEMPEST_CONFIG compute-feature-enabled attach_encrypted_volume ${ATTACH_ENCRYPTED_VOLUME_AVAILABLE:-True}
+
+    if [[ -n "$NOVA_FILTERS" ]]; then
+        iniset $TEMPEST_CONFIG compute-feature-enabled scheduler_enabled_filters ${NOVA_FILTERS}
+    fi
+
     if is_service_enabled n-cell; then
         # Cells doesn't support shelving/unshelving
         iniset $TEMPEST_CONFIG compute-feature-enabled shelve False
@@ -660,7 +679,9 @@ function install_tempest {
 function install_tempest_plugins {
     pushd $TEMPEST_DIR
     if [[ $TEMPEST_PLUGINS != 0 ]] ; then
-        tox -evenv-tempest -- pip install -c $REQUIREMENTS_DIR/upper-constraints.txt $TEMPEST_PLUGINS
+        # The requirements might be on a different branch, while tempest & tempest plugins needs master requirements.
+        (cd $REQUIREMENTS_DIR && git show origin/master:upper-constraints.txt) > u-c-m.txt
+        tox -evenv-tempest -- pip install -c u-c-m.txt $TEMPEST_PLUGINS
         echo "Checking installed Tempest plugins:"
         tox -evenv-tempest -- tempest list-plugins
     fi

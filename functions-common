@@ -92,7 +92,6 @@ function write_clouds_yaml {
         --file $CLOUDS_YAML \
         --os-cloud devstack \
         --os-region-name $REGION_NAME \
-        --os-identity-api-version 3 \
         $CA_CERT_ARG \
         --os-auth-url $KEYSTONE_SERVICE_URI \
         --os-username demo \
@@ -104,7 +103,6 @@ function write_clouds_yaml {
         --file $CLOUDS_YAML \
         --os-cloud devstack-alt \
         --os-region-name $REGION_NAME \
-        --os-identity-api-version 3 \
         $CA_CERT_ARG \
         --os-auth-url $KEYSTONE_SERVICE_URI \
         --os-username alt_demo \
@@ -116,12 +114,22 @@ function write_clouds_yaml {
         --file $CLOUDS_YAML \
         --os-cloud devstack-admin \
         --os-region-name $REGION_NAME \
-        --os-identity-api-version 3 \
         $CA_CERT_ARG \
         --os-auth-url $KEYSTONE_SERVICE_URI \
         --os-username admin \
         --os-password $ADMIN_PASSWORD \
         --os-project-name admin
+
+    # admin with a system-scoped token -> devstack-system
+    $PYTHON $TOP_DIR/tools/update_clouds_yaml.py \
+        --file $CLOUDS_YAML \
+        --os-cloud devstack-system-admin \
+        --os-region-name $REGION_NAME \
+        $CA_CERT_ARG \
+        --os-auth-url $KEYSTONE_SERVICE_URI \
+        --os-username admin \
+        --os-password $ADMIN_PASSWORD \
+        --os-system-scope all
 
     # CLean up any old clouds.yaml files we had laying around
     rm -f $(eval echo ~"$STACK_USER")/.config/openstack/clouds.yaml
@@ -371,14 +379,14 @@ function GetDistro {
     elif [[ "$os_VENDOR" =~ (Fedora) ]]; then
         # For Fedora, just use 'f' and the release
         DISTRO="f$os_RELEASE"
-    elif [[ "$os_VENDOR" =~ (openSUSE) ]]; then
+    elif is_opensuse; then
         DISTRO="opensuse-$os_RELEASE"
         # Tumbleweed uses "n/a" as a codename, and the release is a datestring
         # like 20180218, so not very useful. Leap however uses a release
         # with a "dot", so for example 15.0
         [ "$os_CODENAME" = "n/a" -a "$os_RELEASE" = "${os_RELEASE/\./}" ] && \
             DISTRO="opensuse-tumbleweed"
-    elif [[ "$os_VENDOR" =~ (SUSE LINUX) ]]; then
+    elif is_suse_linux_enterprise; then
         # just use major release
         DISTRO="sle${os_RELEASE%.*}"
     elif [[ "$os_VENDOR" =~ (Red.*Hat) || \
@@ -452,11 +460,30 @@ function is_fedora {
 # (openSUSE, SLE).
 # is_suse
 function is_suse {
+    is_opensuse || is_suse_linux_enterprise
+}
+
+
+# Determine if current distribution is an openSUSE distribution
+# is_opensuse
+function is_opensuse {
     if [[ -z "$os_VENDOR" ]]; then
         GetOSVersion
     fi
 
-    [[ "$os_VENDOR" =~ (openSUSE) || "$os_VENDOR" == "SUSE LINUX" ]]
+    [[ "$os_VENDOR" =~ (openSUSE) ]]
+}
+
+
+# Determine if current distribution is a SUSE Linux Enterprise (SLE)
+# distribution
+# is_suse_linux_enterprise
+function is_suse_linux_enterprise {
+    if [[ -z "$os_VENDOR" ]]; then
+        GetOSVersion
+    fi
+
+    [[ "$os_VENDOR" =~ (^SUSE) ]]
 }
 
 
@@ -1379,6 +1406,35 @@ function zypper_install {
     $sudo http_proxy="${http_proxy:-}" https_proxy="${https_proxy:-}" \
         no_proxy="${no_proxy:-}" \
         zypper --non-interactive install --auto-agree-with-licenses --no-recommends "$@"
+}
+
+# Run bindep and install packages it outputs
+#
+# Usage:
+#  install_bindep <path-to-bindep.txt> [profile,profile]
+#
+# Note unlike the bindep command itself, profile(s) specified should
+# be a single, comma-separated string, no spaces.
+function install_bindep {
+    local file=$1
+    local profiles=${2:-""}
+    local pkgs
+
+    if [[ ! -f $file ]]; then
+        die $LINENO "Can not find bindep file: $file"
+    fi
+
+    # converting here makes it much easier to work with passing
+    # arguments
+    profiles=${profiles/,/ /}
+
+    # Note bindep returns 1 when packages need to be installed, so we
+    # have to ignore it's return for "-e"
+    pkgs=$($DEST/bindep-venv/bin/bindep -b --file $file $profiles || true)
+
+    if [[ -n "${pkgs}" ]]; then
+        install_package ${pkgs}
+    fi
 }
 
 function write_user_unit_file {

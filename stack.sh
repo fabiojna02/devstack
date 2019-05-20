@@ -60,6 +60,9 @@ unset LANGUAGE
 LC_ALL=en_US.utf8
 export LC_ALL
 
+# Clear all OpenStack related envvars
+unset `env | grep -E '^OS_' | cut -d = -f 1`
+
 # Make sure umask is sane
 umask 022
 
@@ -221,7 +224,7 @@ write_devstack_version
 
 # Warn users who aren't on an explicitly supported distro, but allow them to
 # override check and attempt installation with ``FORCE=yes ./stack``
-if [[ ! ${DISTRO} =~ (xenial|artful|bionic|stretch|jessie|f27|f28|opensuse-42.3|opensuse-15.0|opensuse-tumbleweed|rhel7) ]]; then
+if [[ ! ${DISTRO} =~ (xenial|artful|bionic|stretch|jessie|f28|f29|opensuse-42.3|opensuse-15.0|opensuse-tumbleweed|rhel7) ]]; then
     echo "WARNING: this script has not been tested on $DISTRO"
     if [[ "$FORCE" != "yes" ]]; then
         die $LINENO "If you wish to run this script anyway run with FORCE=yes"
@@ -334,6 +337,13 @@ function _install_rdo {
     # Also enable optional for RHEL7 proper.  Note this is a silent
     # no-op on other platforms.
     sudo yum-config-manager --enable rhel-7-server-optional-rpms
+
+    # Enable the Software Collections (SCL) repository for CentOS.
+    # This repository includes useful software (e.g. the Go Toolset)
+    # which is not present in the main repository.
+    if [[ "$os_VENDOR" =~ (CentOS) ]]; then
+        yum_install centos-release-scl
+    fi
 
     if is_oraclelinux; then
         sudo yum-config-manager --enable ol7_optional_latest ol7_addons ol7_MySQL56
@@ -607,6 +617,7 @@ source $TOP_DIR/lib/swift
 source $TOP_DIR/lib/neutron
 source $TOP_DIR/lib/ldap
 source $TOP_DIR/lib/dstat
+source $TOP_DIR/lib/tcpdump
 source $TOP_DIR/lib/etcd3
 
 # Extras Source
@@ -794,6 +805,11 @@ fi
 # Install required infra support libraries
 install_infra
 
+# Install bindep
+$VIRTUALENV_CMD $DEST/bindep-venv
+# TODO(ianw) : optionally install from zuul checkout?
+$DEST/bindep-venv/bin/pip install bindep
+
 # Extras Pre-install
 # ------------------
 # Phase: pre-install
@@ -820,6 +836,18 @@ if is_service_enabled etcd3; then
     install_etcd3
 fi
 
+# Setup TLS certs
+# ---------------
+
+# Do this early, before any webservers are set up to ensure
+# we don't run into problems with missing certs when apache
+# is restarted.
+if is_service_enabled tls-proxy; then
+    configure_CA
+    init_CA
+    init_cert
+fi
+
 # Check Out and Install Source
 # ----------------------------
 
@@ -844,13 +872,6 @@ if is_service_enabled neutron nova horizon; then
     install_neutronclient
 fi
 
-# Setup TLS certs
-if is_service_enabled tls-proxy; then
-    configure_CA
-    init_CA
-    init_cert
-fi
-
 # Install middleware
 install_keystonemiddleware
 
@@ -868,12 +889,10 @@ if is_service_enabled swift; then
     stack_install_service swift
     configure_swift
 
-    # swift3 middleware to provide S3 emulation to Swift
-    if is_service_enabled swift3; then
+    # s3api middleware to provide S3 emulation to Swift
+    if is_service_enabled s3api; then
         # Replace the nova-objectstore port by the swift port
         S3_SERVICE_PORT=8080
-        git_clone $SWIFT3_REPO $SWIFT3_DIR $SWIFT3_BRANCH
-        setup_develop $SWIFT3_DIR
     fi
 fi
 
@@ -894,8 +913,6 @@ if is_service_enabled neutron; then
     stack_install_service neutron
 fi
 
-# Nova configuration is used by placement so we need to create nova.conf
-# first.
 if is_service_enabled nova; then
     # Compute service
     stack_install_service nova
@@ -1042,6 +1059,12 @@ fi
 
 # A better kind of sysstat, with the top process per time slice
 start_dstat
+
+# Run a background tcpdump for debugging
+# Note: must set TCPDUMP_ARGS with the enabled service
+if is_service_enabled tcpdump; then
+    start_tcpdump
+fi
 
 # Etcd
 # -----
@@ -1417,6 +1440,12 @@ if is_service_enabled n-api; then
         # environment is up.
         echo_summary "SKIPPING Cell setup because n-cpu is not enabled. You will have to do this manually before you have a working environment."
     fi
+    # Run the nova-status upgrade check command which can also be used
+    # to verify the base install. Note that this is good enough in a
+    # single node deployment, but in a multi-node setup it won't verify
+    # any subnodes - that would have to be driven from whatever tooling
+    # is deploying the subnodes, e.g. the zuul v3 devstack-multinode job.
+    $NOVA_BIN_DIR/nova-status --config-file $NOVA_CONF upgrade check
 fi
 
 # Run local script
