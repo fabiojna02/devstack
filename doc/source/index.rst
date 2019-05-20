@@ -38,31 +38,32 @@ Quick Start
 Install Linux
 -------------
 
-Start with a clean and minimal install of a Linux system. Devstack
+Start with a clean and minimal install of a Linux system. DevStack
 attempts to support the two latest LTS releases of Ubuntu, the
 latest/current Fedora version, CentOS/RHEL 7, as well as Debian and
 OpenSUSE.
 
-If you do not have a preference, Ubuntu 16.04 is the most tested, and
-will probably go the smoothest.
+If you do not have a preference, Ubuntu 18.04 (Bionic Beaver) is the
+most tested, and will probably go the smoothest.
 
-Add Stack User
---------------
+Add Stack User (optional)
+-------------------------
 
-Devstack should be run as a non-root user with sudo enabled
+DevStack should be run as a non-root user with sudo enabled
 (standard logins to cloud images such as "ubuntu" or "cloud-user"
 are usually fine).
 
-You can quickly create a separate `stack` user to run DevStack with
+If you are not using a cloud image, you can create a separate `stack` user
+to run DevStack with
 
-::
+.. code-block:: console
 
    $ sudo useradd -s /bin/bash -d /opt/stack -m stack
 
 Since this user will be making many changes to your system, it should
 have sudo privileges:
 
-::
+.. code-block:: console
 
     $ echo "stack ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/stack
     $ sudo su - stack
@@ -70,20 +71,21 @@ have sudo privileges:
 Download DevStack
 -----------------
 
-::
+.. code-block:: console
 
    $ git clone https://git.openstack.org/openstack-dev/devstack
    $ cd devstack
 
 The ``devstack`` repo contains a script that installs OpenStack and
-templates for configuration files
+templates for configuration files.
 
 Create a local.conf
 -------------------
 
-Create a ``local.conf`` file with 4 passwords preset at the root of the
+Create a ``local.conf`` file with four passwords preset at the root of the
 devstack git repo.
-::
+
+.. code-block:: ini
 
    [[local|localrc]]
    ADMIN_PASSWORD=secret
@@ -93,12 +95,15 @@ devstack git repo.
 
 This is the minimum required config to get started with DevStack.
 
+.. note:: There is a sample :download:`local.conf </assets/local.conf>` file
+    under the *samples* directory in the devstack repository.
+
 Start the install
 -----------------
 
-::
+.. code-block:: console
 
-   ./stack.sh
+   $ ./stack.sh
 
 This will take a 15 - 20 minutes, largely depending on the speed of
 your internet connection. Many git trees and packages will be
@@ -110,8 +115,8 @@ Profit!
 You now have a working DevStack! Congrats!
 
 Your devstack will have installed ``keystone``, ``glance``, ``nova``,
-``cinder``, ``neutron``, and ``horizon``. Floating IPs will be
-available, guests have access to the external world.
+``placement``, ``cinder``, ``neutron``, and ``horizon``. Floating IPs
+will be available, guests have access to the external world.
 
 You can access horizon to experience the web interface to
 OpenStack, and manage vms, networks, volumes, and images from

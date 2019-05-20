@@ -58,7 +58,7 @@ directory. Inside this directory there can be 3 files.
   plugin's name, which is the name that should be used by users on
   "enable_plugin" lines.  It should generally be the last component of
   the git repo path (e.g., if the plugin's repo is
-  openstack/devstack-foo, then the name here should be "foo") ::
+  openstack/foo, then the name here should be "foo") ::
 
     define_plugin <YOUR PLUGIN>
 
@@ -99,7 +99,7 @@ They are added in the following format::
 
 An example would be as follows::
 
-  enable_plugin ec2-api git://git.openstack.org/openstack/ec2-api
+  enable_plugin ec2-api https://git.openstack.org/openstack/ec2-api
 
 plugin.sh contract
 ==================
@@ -148,7 +148,7 @@ An example plugin would look something as follows.
 
 ``devstack/settings``::
 
-    # settings file for template
+  # settings file for template
   enable_service template
 
 
@@ -277,7 +277,7 @@ be needed in your ``jenkins/jobs/<project>.yaml`` definition in
   # note the actual url here is somewhat irrelevant because it
   # caches in nodepool, however make it a valid url for
   # documentation purposes.
-  export DEVSTACK_LOCAL_CONFIG="enable_plugin ec2-api git://git.openstack.org/openstack/ec2-api"
+  export DEVSTACK_LOCAL_CONFIG="enable_plugin ec2-api https://git.openstack.org/openstack/ec2-api"
 
 See Also
 ========
