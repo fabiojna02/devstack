@@ -113,7 +113,7 @@ cleanup_rpc_backend
 cleanup_database
 
 # Clean out data and status
-sudo rm -rf $DATA_DIR $DEST/status
+sudo rm -rf $DATA_DIR $DEST/status $DEST/async
 
 # Clean out the log file and log directories
 if [[ -n "$LOGFILE" ]] && [[ -f "$LOGFILE" ]]; then
@@ -123,12 +123,10 @@ if [[ -n "$LOGDIR" ]] && [[ -d "$LOGDIR" ]]; then
     sudo rm -rf $LOGDIR
 fi
 
-# Clean out the systemd user unit files if systemd was used.
-if [[ "$USE_SYSTEMD" = "True" ]]; then
-    sudo find $SYSTEMD_DIR -type f -name '*devstack@*service' -delete
-    # Make systemd aware of the deletion.
-    $SYSTEMCTL daemon-reload
-fi
+# Clean out the systemd unit files.
+sudo find $SYSTEMD_DIR -type f -name '*devstack@*service' -delete
+# Make systemd aware of the deletion.
+$SYSTEMCTL daemon-reload
 
 # Clean up venvs
 DIRS_TO_CLEAN="$WHEELHOUSE ${PROJECT_VENV[@]} .config/openstack"
@@ -147,12 +145,5 @@ done
 
 rm -rf ~/.config/openstack
 
-# Clean up all *.pyc files
-if [[ -n "$DEST" ]] && [[ -d "$DEST" ]]; then
-    find_version=`find --version | awk '{ print $NF; exit}'`
-    if vercmp "$find_version" "<" "4.2.3" ; then
-        sudo find $DEST -name "*.pyc" -print0 | xargs -0 rm
-    else
-        sudo find $DEST -name "*.pyc" -delete
-    fi
-fi
+# Clear any fstab entries made
+sudo sed -i '/.*comment=devstack-.*/ d' /etc/fstab

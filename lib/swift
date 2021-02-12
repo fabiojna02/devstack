@@ -47,7 +47,6 @@ else
     SWIFT_BIN_DIR=$(get_python_exec_prefix)
 fi
 
-SWIFT_AUTH_CACHE_DIR=${SWIFT_AUTH_CACHE_DIR:-/var/cache/swift}
 SWIFT_APACHE_WSGI_DIR=${SWIFT_APACHE_WSGI_DIR:-/var/www/swift}
 
 SWIFT_SERVICE_PROTOCOL=${SWIFT_SERVICE_PROTOCOL:-$SERVICE_PROTOCOL}
@@ -429,10 +428,13 @@ function configure_swift {
         swift_pipeline+=" s3api"
     fi
     if is_service_enabled keystone; then
+        swift_pipeline+=" authtoken"
         if is_service_enabled s3api;then
             swift_pipeline+=" s3token"
+            iniset ${SWIFT_CONFIG_PROXY_SERVER} filter:s3token auth_uri ${KEYSTONE_AUTH_URI_V3}
+            iniset ${SWIFT_CONFIG_PROXY_SERVER} filter:s3token delay_auth_decision true
         fi
-        swift_pipeline+=" authtoken keystoneauth"
+        swift_pipeline+=" keystoneauth"
     fi
 
     swift_pipeline+=" tempauth "
@@ -452,7 +454,7 @@ function configure_swift {
     iniset ${SWIFT_CONFIG_PROXY_SERVER} filter:authtoken log_name swift
 
     iniset ${SWIFT_CONFIG_PROXY_SERVER} filter:authtoken paste.filter_factory keystonemiddleware.auth_token:filter_factory
-    configure_auth_token_middleware $SWIFT_CONFIG_PROXY_SERVER swift $SWIFT_AUTH_CACHE_DIR filter:authtoken
+    configure_keystone_authtoken_middleware $SWIFT_CONFIG_PROXY_SERVER swift filter:authtoken
     iniset ${SWIFT_CONFIG_PROXY_SERVER} filter:authtoken delay_auth_decision 1
     iniset ${SWIFT_CONFIG_PROXY_SERVER} filter:authtoken cache swift.cache
     iniset ${SWIFT_CONFIG_PROXY_SERVER} filter:authtoken include_service_catalog False
@@ -525,7 +527,7 @@ function configure_swift {
         else
             iniset ${testfile} func_test auth_port 80
         fi
-        iniset ${testfile} func_test auth_uri ${KEYSTONE_AUTH_URI}
+        iniset ${testfile} func_test auth_uri ${KEYSTONE_SERVICE_URI}
         if [[ "$auth_vers" == "3" ]]; then
             iniset ${testfile} func_test auth_prefix /identity/v3/
         else
@@ -735,15 +737,13 @@ function init_swift {
         $SWIFT_BIN_DIR/swift-ring-builder container.builder rebalance 42
         $SWIFT_BIN_DIR/swift-ring-builder account.builder rebalance 42
     } && popd >/dev/null
-
-    # Create cache dir
-    sudo install -d -o ${STACK_USER} $SWIFT_AUTH_CACHE_DIR
-    rm -f $SWIFT_AUTH_CACHE_DIR/*
 }
 
 function install_swift {
     git_clone $SWIFT_REPO $SWIFT_DIR $SWIFT_BRANCH
-    setup_develop $SWIFT_DIR
+    # keystonemiddleware needs to be installed via keystone extras as defined
+    # in setup.cfg, see bug #1909018 for more details.
+    setup_develop $SWIFT_DIR keystone
     if [ "$SWIFT_USE_MOD_WSGI" == "True" ]; then
         install_apache_wsgi
     fi

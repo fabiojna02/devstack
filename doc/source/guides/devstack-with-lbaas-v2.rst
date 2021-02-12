@@ -6,7 +6,7 @@ providing load balancing services for OpenStack.
 
 This guide will show you how to create a devstack with `Octavia API`_ enabled.
 
-.. _Octavia API: https://developer.openstack.org/api-ref/load-balancer/v2/index.html
+.. _Octavia API: https://docs.openstack.org/api-ref/load-balancer/v2/index.html
 
 Phase 1: Create DevStack + 2 nova instances
 --------------------------------------------
@@ -19,7 +19,7 @@ Install devstack
 
 ::
 
-    git clone https://git.openstack.org/openstack-dev/devstack
+    git clone https://opendev.org/openstack/devstack
     cd devstack/tools
     sudo ./create-stack-user.sh
     cd ../..
@@ -35,14 +35,11 @@ Edit your ``/opt/stack/devstack/local.conf`` to look like
 ::
 
     [[local|localrc]]
-    enable_plugin octavia https://git.openstack.org/openstack/octavia
+    enable_plugin octavia https://opendev.org/openstack/octavia
     # If you are enabling horizon, include the octavia dashboard
-    # enable_plugin octavia-dashboard https://git.openstack.org/openstack/octavia-dashboard.git
+    # enable_plugin octavia-dashboard https://opendev.org/openstack/octavia-dashboard.git
     # If you are enabling barbican for TLS offload in Octavia, include it here.
-    # enable_plugin barbican https://github.com/openstack/barbican.git
-
-    # If you have python3 available:
-    # USE_PYTHON3=True
+    # enable_plugin barbican https://opendev.org/openstack/barbican
 
     # ===== BEGIN localrc =====
     DATABASE_PASSWORD=password
@@ -62,7 +59,7 @@ Edit your ``/opt/stack/devstack/local.conf`` to look like
     ENABLED_SERVICES+=,n-api,n-crt,n-cpu,n-cond,n-sch,n-api-meta,n-sproxy
     ENABLED_SERVICES+=,placement-api,placement-client
     # Glance
-    ENABLED_SERVICES+=,g-api,g-reg
+    ENABLED_SERVICES+=,g-api
     # Neutron
     ENABLED_SERVICES+=,q-svc,q-agt,q-dhcp,q-l3,q-meta,neutron
     ENABLED_SERVICES+=,octavia,o-cw,o-hk,o-hm,o-api
@@ -91,7 +88,7 @@ Create two nova instances that we can use as test http servers:
 
     #create nova instances on private network
     openstack server create --image $(openstack image list | awk '/ cirros-.*-x86_64-.* / {print $2}') --flavor 1 --nic net-id=$(openstack network list | awk '/ private / {print $2}') node1
-    openstack server creeate --image $(openstack image list | awk '/ cirros-.*-x86_64-.* / {print $2}') --flavor 1 --nic net-id=$(openstack network list | awk '/ private / {print $2}') node2
+    openstack server create --image $(openstack image list | awk '/ cirros-.*-x86_64-.* / {print $2}') --flavor 1 --nic net-id=$(openstack network list | awk '/ private / {print $2}') node2
     openstack server list # should show the nova instances just created
 
     #add secgroup rules to allow ssh etc..

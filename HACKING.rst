@@ -10,8 +10,8 @@ and so is limited to Bash (version 4 and up) and compatible shells.
 Shell script was chosen because it best illustrates the steps used to
 set up and interact with OpenStack components.
 
-DevStack's official repository is located on git.openstack.org at
-https://git.openstack.org/openstack-dev/devstack.  Besides the master branch that
+DevStack's official repository is located on opendev.org at
+https://opendev.org/openstack/devstack.  Besides the master branch that
 tracks the OpenStack trunk branches a separate branch is maintained for all
 OpenStack releases starting with Diablo (stable/diablo).
 
@@ -23,10 +23,10 @@ __ contribute_
 .. _contribute: https://docs.openstack.org/infra/manual/developers.html
 
 __ lp_
-.. _lp: https://launchpad.net/~devstack
+.. _lp: https://launchpad.net/devstack
 
 The `Gerrit review
-queue <https://review.openstack.org/#/q/project:openstack-dev/devstack,n,z>`__
+queue <https://review.opendev.org/#/q/project:openstack/devstack>`__
 is used for all commits.
 
 The primary script in DevStack is ``stack.sh``, which performs the bulk of the
@@ -145,8 +145,8 @@ follows:
 * Global configuration that may be referenced in ``local.conf``, i.e. ``DEST``, ``DATA_DIR``
 * Global service configuration like ``ENABLED_SERVICES``
 * Variables used by multiple services that do not have a clear owner, i.e.
-  ``VOLUME_BACKING_FILE_SIZE`` (nova-compute, nova-volumes and cinder) or
-  ``PUBLIC_NETWORK_NAME`` (nova-network and neutron)
+  ``VOLUME_BACKING_FILE_SIZE`` (nova-compute and cinder) or
+  ``PUBLIC_NETWORK_NAME`` (only neutron but formerly nova-network too)
 * Variables that can not be cleanly declared in a project file due to
   dependency ordering, i.e. the order of sourcing the project files can
   not be changed for other reasons but the earlier file needs to dereference a
@@ -163,7 +163,7 @@ Documentation
 
 The DevStack repo now contains all of the static pages of devstack.org in
 the ``doc/source`` directory. The OpenStack CI system rebuilds the docs after every
-commit and updates devstack.org (now a redirect to docs.openstack.org/developer/devstack).
+commit and updates devstack.org (now a redirect to https://docs.openstack.org/devstack/latest/).
 
 All of the scripts are processed with shocco_ to render them with the comments
 as text describing the script below.  For this reason we tend to be a little
@@ -189,7 +189,7 @@ to enforce basic guidelines, similar to pep8 and flake8 tools for Python. The
 list below is not complete for what bashate checks, nor is it all checked
 by bashate.  So many lines of code, so little time.
 
-.. _bashate: https://pypi.python.org/pypi/bashate
+.. _bashate: https://pypi.org/project/bashate/
 
 Whitespace Rules
 ----------------

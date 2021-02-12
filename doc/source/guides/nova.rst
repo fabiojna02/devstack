@@ -10,7 +10,7 @@ nova-serialproxy
 ================
 
 In Juno, nova implemented a `spec
-<http://specs.openstack.org/openstack/nova-specs/specs/juno/implemented/serial-ports.html>`_
+<https://specs.openstack.org/openstack/nova-specs/specs/juno/implemented/serial-ports.html>`_
 to allow read/write access to the serial console of an instance via
 `nova-serialproxy
 <https://docs.openstack.org/nova/latest/cli/nova-serialproxy.html>`_.
@@ -63,7 +63,7 @@ The service can be enabled by adding ``n-sproxy`` to
 Enabling the service is enough to be functional for a single machine DevStack.
 
 These config options are defined in `nova.conf.serial_console
-<https://github.com/openstack/nova/blob/master/nova/conf/serial_console.py>`_.
+<https://opendev.org/openstack/nova/src/master/nova/conf/serial_console.py>`_.
 
 For more information on OpenStack configuration see the `OpenStack
 Compute Service Configuration Reference
@@ -83,7 +83,7 @@ some fake resource inventory values and keeps track of the state of the
 compute API but is good enough for most API testing, and is also used within
 the nova functional tests themselves so is fairly robust.
 
-.. _fake virt driver: http://git.openstack.org/cgit/openstack/nova/tree/nova/virt/fake.py
+.. _fake virt driver: https://opendev.org/openstack/nova/src/branch/master/nova/virt/fake.py
 
 Configuration
 -------------

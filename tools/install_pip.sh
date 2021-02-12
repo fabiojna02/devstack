@@ -5,7 +5,7 @@
 # Update pip and friends to a known common version
 
 # Assumptions:
-# - if USE_PYTHON3=True, PYTHON3_VERSION refers to a version already installed
+# - PYTHON3_VERSION refers to a version already installed
 
 set -o errexit
 
@@ -35,7 +35,7 @@ FILES=$TOP_DIR/files
 # done by openstack-infra diskimage-builder elements as part of image
 # preparation [1].  This prevents any network access, which can be
 # unreliable in CI situations.
-# [1] http://git.openstack.org/cgit/openstack-infra/project-config/tree/nodepool/elements/cache-devstack/source-repository-pip
+# [1] https://opendev.org/openstack/project-config/src/branch/master/nodepool/elements/cache-devstack/source-repository-pip
 
 PIP_GET_PIP_URL=${PIP_GET_PIP_URL:-"https://bootstrap.pypa.io/get-pip.py"}
 LOCAL_PIP="$FILES/$(basename $PIP_GET_PIP_URL)"
@@ -53,6 +53,8 @@ function get_versions {
     else
         echo "pip: Not Installed"
     fi
+    # Show python3 module version
+    python${PYTHON3_VERSION} -m pip --version
 }
 
 
@@ -89,10 +91,9 @@ function install_get_pip {
             die $LINENO "Download of get-pip.py failed"
         touch $LOCAL_PIP.downloaded
     fi
-    sudo -H -E python $LOCAL_PIP -c $TOOLS_DIR/cap-pip.txt
-    if python3_enabled; then
-        sudo -H -E python${PYTHON3_VERSION} $LOCAL_PIP -c $TOOLS_DIR/cap-pip.txt
-    fi
+    # TODO: remove the trailing pip constraint when a proper fix
+    # arrives for bug https://bugs.launchpad.net/devstack/+bug/1906322
+    sudo -H -E python${PYTHON3_VERSION} $LOCAL_PIP -c $TOOLS_DIR/cap-pip.txt
 }
 
 
@@ -125,7 +126,14 @@ function configure_pypi_alternative_url {
 # Show starting versions
 get_versions
 
-# Do pip
+if [[ -n $PYPI_ALTERNATIVE_URL ]]; then
+    configure_pypi_alternative_url
+fi
+
+# Just use system pkgs on Focal
+if [[ "$DISTRO" == focal ]]; then
+    exit 0
+fi
 
 # Eradicate any and all system packages
 
@@ -133,15 +141,12 @@ get_versions
 # results in a nonfunctional system. pip on fedora installs to /usr so pip
 # can safely override the system pip for all versions of fedora
 if ! is_fedora  && ! is_suse; then
-    uninstall_package python-pip
-    uninstall_package python3-pip
+    if is_package_installed python3-pip ; then
+        uninstall_package python3-pip
+    fi
 fi
 
 install_get_pip
-
-if [[ -n $PYPI_ALTERNATIVE_URL ]]; then
-    configure_pypi_alternative_url
-fi
 
 set -x
 

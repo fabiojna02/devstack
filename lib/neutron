@@ -36,7 +36,6 @@ GITDIR["python-neutronclient"]=$DEST/python-neutronclient
 NEUTRON_DEPLOY_MOD_WSGI=$(trueorfalse False NEUTRON_DEPLOY_MOD_WSGI)
 NEUTRON_AGENT=${NEUTRON_AGENT:-openvswitch}
 NEUTRON_DIR=$DEST/neutron
-NEUTRON_AUTH_CACHE_DIR=${NEUTRON_AUTH_CACHE_DIR:-/var/cache/neutron}
 
 NEUTRON_DISTRIBUTED_ROUTING=$(trueorfalse False NEUTRON_DISTRIBUTED_ROUTING)
 # Distributed Virtual Router (DVR) configuration
@@ -55,6 +54,7 @@ NEUTRON_DHCP_BINARY="neutron-dhcp-agent"
 NEUTRON_CONF_DIR=/etc/neutron
 NEUTRON_CONF=$NEUTRON_CONF_DIR/neutron.conf
 NEUTRON_META_CONF=$NEUTRON_CONF_DIR/metadata_agent.ini
+NEUTRON_META_DATA_HOST=${NEUTRON_META_DATA_HOST:-$(ipv6_unquote $SERVICE_HOST)}
 
 NEUTRON_DHCP_CONF=$NEUTRON_CONF_DIR/dhcp_agent.ini
 NEUTRON_L3_CONF=$NEUTRON_CONF_DIR/l3_agent.ini
@@ -62,7 +62,6 @@ NEUTRON_AGENT_CONF=$NEUTRON_CONF_DIR/
 NEUTRON_CREATE_INITIAL_NETWORKS=${NEUTRON_CREATE_INITIAL_NETWORKS:-True}
 
 NEUTRON_STATE_PATH=${NEUTRON_STATE_PATH:=$DATA_DIR/neutron}
-NEUTRON_AUTH_CACHE_DIR=${NEUTRON_AUTH_CACHE_DIR:-/var/cache/neutron}
 
 NEUTRON_UWSGI_CONF=$NEUTRON_CONF_DIR/neutron-api-uwsgi.ini
 
@@ -99,6 +98,17 @@ NEUTRON_ROOTWRAP_DAEMON_CMD="$NEUTRON_ROOTWRAP-daemon $NEUTRON_ROOTWRAP_CONF_FIL
 # an external network bridge
 PUBLIC_BRIDGE=${PUBLIC_BRIDGE:-br-ex}
 PUBLIC_BRIDGE_MTU=${PUBLIC_BRIDGE_MTU:-1500}
+
+# Network type - default vxlan, however enables vlan based jobs to override
+# using the legacy environment variable as well as a new variable in greater
+# alignment with the naming scheme of this plugin.
+NEUTRON_TENANT_NETWORK_TYPE=${NEUTRON_TENANT_NETWORK_TYPE:-vxlan}
+
+NEUTRON_TENANT_VLAN_RANGE=${NEUTRON_TENANT_VLAN_RANGE:-${TENANT_VLAN_RANGE:-100:150}}
+
+# Physical network for VLAN network usage.
+NEUTRON_PHYSICAL_NETWORK=${NEUTRON_PHYSICAL_NETWORK:-}
+
 
 # Additional neutron api config files
 declare -a -g _NEUTRON_SERVER_EXTRA_CONF_FILES_ABS
@@ -200,12 +210,11 @@ function configure_neutron_new {
         iniset $NEUTRON_CONF DEFAULT router_distributed $NEUTRON_DISTRIBUTED_ROUTING
 
         iniset $NEUTRON_CONF DEFAULT auth_strategy $NEUTRON_AUTH_STRATEGY
-        configure_auth_token_middleware $NEUTRON_CONF neutron $NEUTRON_AUTH_CACHE_DIR keystone_authtoken
-        configure_auth_token_middleware $NEUTRON_CONF nova $NEUTRON_AUTH_CACHE_DIR nova
+        configure_keystone_authtoken_middleware $NEUTRON_CONF neutron
+        configure_keystone_authtoken_middleware $NEUTRON_CONF nova nova
 
-        # Configure VXLAN
-        # TODO(sc68cal) not hardcode?
-        iniset $NEUTRON_CORE_PLUGIN_CONF ml2 tenant_network_types vxlan
+        # Configure tenant network type
+        iniset $NEUTRON_CORE_PLUGIN_CONF ml2 tenant_network_types $NEUTRON_TENANT_NETWORK_TYPE
 
         local mech_drivers="openvswitch"
         if [[ "$NEUTRON_DISTRIBUTED_ROUTING" = "True" ]]; then
@@ -216,7 +225,10 @@ function configure_neutron_new {
         iniset $NEUTRON_CORE_PLUGIN_CONF ml2 mechanism_drivers $mech_drivers
 
         iniset $NEUTRON_CORE_PLUGIN_CONF ml2_type_vxlan vni_ranges 1001:2000
-        iniset $NEUTRON_CORE_PLUGIN_CONF ml2_type_flat flat_networks public
+        iniset $NEUTRON_CORE_PLUGIN_CONF ml2_type_flat flat_networks $PUBLIC_NETWORK_NAME
+        if [[ "$NEUTRON_TENANT_NETWORK_TYPE" =~ "vlan" ]] && [[ "$NEUTRON_PHYSICAL_NETWORK" != "" ]]; then
+            iniset $NEUTRON_CORE_PLUGIN_CONF ml2_type_vlan network_vlan_ranges ${NEUTRON_PHYSICAL_NETWORK}:${NEUTRON_TENANT_VLAN_RANGE}
+        fi
         if [[ "$NEUTRON_PORT_SECURITY" = "True" ]]; then
             neutron_ml2_extension_driver_add port_security
         fi
@@ -239,6 +251,7 @@ function configure_neutron_new {
             if [[ "$NEUTRON_DISTRIBUTED_ROUTING" = "True" ]]; then
                 iniset $NEUTRON_CORE_PLUGIN_CONF agent l2_population True
                 iniset $NEUTRON_CORE_PLUGIN_CONF agent enable_distributed_routing True
+                iniset $NEUTRON_CORE_PLUGIN_CONF agent arp_responder True
             fi
         fi
 
@@ -285,14 +298,14 @@ function configure_neutron_new {
         cp $NEUTRON_DIR/etc/metadata_agent.ini.sample $NEUTRON_META_CONF
 
         iniset $NEUTRON_META_CONF DEFAULT debug $ENABLE_DEBUG_LOG_LEVEL
-        iniset $NEUTRON_META_CONF DEFAULT nova_metadata_host $SERVICE_HOST
+        iniset $NEUTRON_META_CONF DEFAULT nova_metadata_host $NEUTRON_META_DATA_HOST
         iniset $NEUTRON_META_CONF DEFAULT metadata_workers $API_WORKERS
         # TODO(ihrachys) do we really need to set rootwrap for metadata agent?
         configure_root_helper_options $NEUTRON_META_CONF
 
         # TODO(dtroyer): remove the v2.0 hard code below
         iniset $NEUTRON_META_CONF DEFAULT auth_url $KEYSTONE_SERVICE_URI
-        configure_auth_token_middleware $NEUTRON_META_CONF neutron $NEUTRON_AUTH_CACHE_DIR DEFAULT
+        configure_keystone_authtoken_middleware $NEUTRON_META_CONF neutron DEFAULT
     fi
 
     # Format logging
@@ -341,7 +354,6 @@ function configure_neutron_rootwrap {
 # if not passed $NOVA_CONF is used.
 function configure_neutron_nova_new {
     local conf=${1:-$NOVA_CONF}
-    iniset $conf DEFAULT use_neutron True
     iniset $conf neutron auth_type "password"
     iniset $conf neutron auth_url "$KEYSTONE_SERVICE_URI"
     iniset $conf neutron username neutron
@@ -351,8 +363,6 @@ function configure_neutron_nova_new {
     iniset $conf neutron project_domain_name "Default"
     iniset $conf neutron auth_strategy $NEUTRON_AUTH_STRATEGY
     iniset $conf neutron region_name "$REGION_NAME"
-
-    iniset $conf DEFAULT firewall_driver nova.virt.firewall.NoopFirewallDriver
 
     # optionally set options in nova_conf
     neutron_plugin_create_nova_conf $conf
@@ -389,13 +399,6 @@ function create_neutron_accounts_new {
     fi
 }
 
-# create_neutron_cache_dir() - Part of the init_neutron() process
-function create_neutron_cache_dir {
-    # Create cache dir
-    sudo install -d -o $STACK_USER $NEUTRON_AUTH_CACHE_DIR
-    rm -f $NEUTRON_AUTH_CACHE_DIR/*
-}
-
 # init_neutron() - Initialize databases, etc.
 function init_neutron_new {
 
@@ -405,8 +408,6 @@ function init_neutron_new {
     # Run Neutron db migrations
     $NEUTRON_BIN_DIR/neutron-db-manage upgrade heads
     time_stop "dbsync"
-
-    create_neutron_cache_dir
 }
 
 # install_neutron() - Collect source and prepare
@@ -462,7 +463,7 @@ function start_neutron_api {
     done
 
     if [ "$NEUTRON_DEPLOY_MOD_WSGI" == "True" ]; then
-        run_process neutron-api "$NEUTRON_BIN_DIR/uwsgi --procname-prefix neutron-api --ini $NEUTRON_UWSGI_CONF"
+        run_process neutron-api "$(which uwsgi) --procname-prefix neutron-api --ini $NEUTRON_UWSGI_CONF"
         neutron_url=$service_protocol://$NEUTRON_SERVICE_HOST/networking/
         enable_service neutron-rpc-server
         run_process neutron-rpc-server "$NEUTRON_BIN_DIR/neutron-rpc-server $opts"

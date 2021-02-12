@@ -50,8 +50,6 @@
 # See "Neutron Network Configuration" below for additional variables
 # that must be set in localrc for connectivity across hosts with
 # Neutron.
-#
-# With Neutron networking the NETWORK_MANAGER variable is ignored.
 
 # Settings
 # --------
@@ -59,8 +57,6 @@
 
 # Neutron Network Configuration
 # -----------------------------
-
-deprecated "Using lib/neutron-legacy is deprecated, and it will be removed in the future"
 
 if is_service_enabled tls-proxy; then
     Q_PROTOCOL="https"
@@ -73,7 +69,6 @@ GITDIR["python-neutronclient"]=$DEST/python-neutronclient
 
 NEUTRON_DIR=$DEST/neutron
 NEUTRON_FWAAS_DIR=$DEST/neutron-fwaas
-NEUTRON_AUTH_CACHE_DIR=${NEUTRON_AUTH_CACHE_DIR:-/var/cache/neutron}
 
 # Support entry points installation of console scripts
 if [[ -d $NEUTRON_DIR/bin/neutron-server ]]; then
@@ -231,15 +226,17 @@ PHYSICAL_NETWORK=${PHYSICAL_NETWORK:-public}
 # Example: ``OVS_PHYSICAL_BRIDGE=br-eth1``
 OVS_PHYSICAL_BRIDGE=${OVS_PHYSICAL_BRIDGE:-br-ex}
 
-default_route_dev=$(ip route | grep ^default | awk '{print $5}')
-die_if_not_set $LINENO default_route_dev "Failure retrieving default route device"
 # With the linuxbridge agent, if using VLANs for tenant networks,
 # or if using flat or VLAN provider networks, set in ``localrc`` to
 # the name of the network interface to use for the physical
 # network.
 #
 # Example: ``LB_PHYSICAL_INTERFACE=eth1``
-LB_PHYSICAL_INTERFACE=${LB_PHYSICAL_INTERFACE:-$default_route_dev}
+if [[ $Q_AGENT == "linuxbridge" && -z ${LB_PHYSICAL_INTERFACE} ]]; then
+    default_route_dev=$( (ip route; ip -6 route) | grep ^default | head -n 1 | awk '{print $5}')
+    die_if_not_set $LINENO default_route_dev "Failure retrieving default route device"
+    LB_PHYSICAL_INTERFACE=$default_route_dev
+fi
 
 # When Neutron tunnels are enabled it is needed to specify the
 # IP address of the end point in the local server. This IP is set
@@ -367,6 +364,11 @@ function configure_mutnauq {
         _configure_neutron_ceilometer_notifications
     fi
 
+    if [[ $Q_AGENT == "ovn" ]]; then
+        configure_ovn
+        configure_ovn_plugin
+    fi
+
     iniset $NEUTRON_CONF DEFAULT api_workers "$API_WORKERS"
     # devstack is not a tool for running uber scale OpenStack
     # clouds, therefore running without a dedicated RPC worker
@@ -376,9 +378,8 @@ function configure_mutnauq {
 
 function create_nova_conf_neutron {
     local conf=${1:-$NOVA_CONF}
-    iniset $conf DEFAULT use_neutron True
     iniset $conf neutron auth_type "password"
-    iniset $conf neutron auth_url "$KEYSTONE_AUTH_URI"
+    iniset $conf neutron auth_url "$KEYSTONE_SERVICE_URI"
     iniset $conf neutron username "$Q_ADMIN_USERNAME"
     iniset $conf neutron password "$SERVICE_PASSWORD"
     iniset $conf neutron user_domain_name "$SERVICE_DOMAIN_NAME"
@@ -386,11 +387,6 @@ function create_nova_conf_neutron {
     iniset $conf neutron project_domain_name "$SERVICE_DOMAIN_NAME"
     iniset $conf neutron auth_strategy "$Q_AUTH_STRATEGY"
     iniset $conf neutron region_name "$REGION_NAME"
-
-    if [[ "$Q_USE_SECGROUP" == "True" ]]; then
-        LIBVIRT_FIREWALL_DRIVER=nova.virt.firewall.NoopFirewallDriver
-        iniset $conf DEFAULT firewall_driver $LIBVIRT_FIREWALL_DRIVER
-    fi
 
     # optionally set options in nova_conf
     neutron_plugin_create_nova_conf $conf
@@ -449,6 +445,10 @@ function install_mutnauq {
 
     git_clone $NEUTRON_REPO $NEUTRON_DIR $NEUTRON_BRANCH
     setup_develop $NEUTRON_DIR
+
+    if [[ $Q_AGENT == "ovn" ]]; then
+        install_ovn
+    fi
 }
 
 # install_neutron_agent_packages() - Collect source and prepare
@@ -470,6 +470,22 @@ function configure_neutron_after_post_config {
     fi
 }
 
+# Start running OVN processes
+function start_ovn_services {
+    if [[ $Q_AGENT == "ovn" ]]; then
+        init_ovn
+        start_ovn
+        if [[ "$OVN_L3_CREATE_PUBLIC_NETWORK" == "True" ]]; then
+            if [[ "$NEUTRON_CREATE_INITIAL_NETWORKS" != "True" ]]; then
+                echo "OVN_L3_CREATE_PUBLIC_NETWORK=True is being ignored "
+                echo "because NEUTRON_CREATE_INITIAL_NETWORKS is set to False"
+            else
+                create_public_bridge
+            fi
+        fi
+    fi
+}
+
 # Start running processes
 function start_neutron_service_and_check {
     local service_port=$Q_PORT
@@ -486,7 +502,7 @@ function start_neutron_service_and_check {
     # Start the Neutron service
     if [ "$NEUTRON_DEPLOY_MOD_WSGI" == "True" ]; then
         enable_service neutron-api
-        run_process neutron-api "$NEUTRON_BIN_DIR/uwsgi --procname-prefix neutron-api --ini $NEUTRON_UWSGI_CONF"
+        run_process neutron-api "$(which uwsgi) --procname-prefix neutron-api --ini $NEUTRON_UWSGI_CONF"
         neutron_url=$Q_PROTOCOL://$Q_HOST/networking/
         enable_service neutron-rpc-server
         run_process neutron-rpc-server "$NEUTRON_BIN_DIR/neutron-rpc-server $cfg_file_options"
@@ -586,6 +602,10 @@ function stop_mutnauq_other {
 function stop_mutnauq {
     stop_mutnauq_other
     stop_mutnauq_l2_agent
+
+    if [[ $Q_AGENT == "ovn" ]]; then
+        stop_ovn
+    fi
 }
 
 # _move_neutron_addresses_route() - Move the primary IP to the OVS bridge
@@ -633,7 +653,7 @@ function _move_neutron_addresses_route {
             IP_UP="sudo ip link set $to_intf up"
             if [[ "$af" == "inet" ]]; then
                 IP=$(echo $IP_BRD | awk '{ print $1; exit }' | grep -o -E '(.*)/' | cut -d "/" -f1)
-                ARP_CMD="sudo arping -A -c 3 -w 4.5 -I $to_intf $IP "
+                ARP_CMD="sudo arping -A -c 3 -w 5 -I $to_intf $IP "
             fi
         fi
 
@@ -679,6 +699,10 @@ function cleanup_mutnauq {
     for ns in $(sudo ip netns list | grep -o -E '(qdhcp|qrouter|fip|snat)-[0-9a-f-]*'); do
         sudo ip netns delete ${ns}
     done
+
+    if [[ $Q_AGENT == "ovn" ]]; then
+        cleanup_ovn
+    fi
 }
 
 
@@ -843,13 +867,13 @@ function _configure_neutron_service {
     iniset $NEUTRON_CONF DEFAULT allow_overlapping_ips $Q_ALLOW_OVERLAPPING_IP
 
     iniset $NEUTRON_CONF DEFAULT auth_strategy $Q_AUTH_STRATEGY
-    _neutron_setup_keystone $NEUTRON_CONF keystone_authtoken
+    configure_keystone_authtoken_middleware $NEUTRON_CONF $Q_ADMIN_USERNAME
 
     # Configuration for neutron notifications to nova.
     iniset $NEUTRON_CONF DEFAULT notify_nova_on_port_status_changes $Q_NOTIFY_NOVA_PORT_STATUS_CHANGES
     iniset $NEUTRON_CONF DEFAULT notify_nova_on_port_data_changes $Q_NOTIFY_NOVA_PORT_DATA_CHANGES
 
-    configure_auth_token_middleware $NEUTRON_CONF nova $NEUTRON_AUTH_CACHE_DIR nova
+    configure_keystone_authtoken_middleware $NEUTRON_CONF nova nova
 
     # Configure plugin
     neutron_plugin_configure_service
@@ -933,15 +957,6 @@ function _neutron_setup_rootwrap {
     if [[ "$Q_USE_ROOTWRAP_DAEMON" == "True" ]]; then
         iniset $NEUTRON_CONF agent root_helper_daemon "$Q_RR_DAEMON_COMMAND"
     fi
-}
-
-# Configures keystone integration for neutron service
-function _neutron_setup_keystone {
-    local conf_file=$1
-    local section=$2
-
-    create_neutron_cache_dir
-    configure_auth_token_middleware $conf_file $Q_ADMIN_USERNAME $NEUTRON_AUTH_CACHE_DIR $section
 }
 
 function _neutron_setup_interface_driver {

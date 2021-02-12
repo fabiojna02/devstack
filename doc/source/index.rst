@@ -11,9 +11,8 @@
    and how to go beyond this setup. Both should be a set of quick
    links to other documents to let people explore from there.
 
-==========
- DevStack
-==========
+DevStack
+========
 
 .. image:: assets/images/logo-blue.png
 
@@ -23,8 +22,7 @@ everything from git master.  It is used interactively as a development
 environment and as the basis for much of the OpenStack project's
 functional testing.
 
-The source is available at
-`<https://git.openstack.org/cgit/openstack-dev/devstack>`__.
+The source is available at `<https://opendev.org/openstack/devstack>`__.
 
 .. warning::
 
@@ -33,15 +31,14 @@ The source is available at
    are dedicated to this purpose.
 
 Quick Start
-===========
++++++++++++
 
 Install Linux
 -------------
 
 Start with a clean and minimal install of a Linux system. DevStack
 attempts to support the two latest LTS releases of Ubuntu, the
-latest/current Fedora version, CentOS/RHEL 7, as well as Debian and
-OpenSUSE.
+latest/current Fedora version, CentOS/RHEL 8 and OpenSUSE.
 
 If you do not have a preference, Ubuntu 18.04 (Bionic Beaver) is the
 most tested, and will probably go the smoothest.
@@ -73,7 +70,7 @@ Download DevStack
 
 .. code-block:: console
 
-   $ git clone https://git.openstack.org/openstack-dev/devstack
+   $ git clone https://opendev.org/openstack/devstack
    $ cd devstack
 
 The ``devstack`` repo contains a script that installs OpenStack and
@@ -153,8 +150,15 @@ Get :doc:`the big picture <overview>` of what we are trying to do
 with devstack, and help us by :doc:`contributing to the project
 <hacking>`.
 
+If you are a new contributor to devstack please refer: :doc:`contributor/contributing`
+
+.. toctree::
+   :hidden:
+
+   contributor/contributing
+
 Contents
---------
+++++++++
 
 .. toctree::
    :glob:

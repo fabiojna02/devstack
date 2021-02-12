@@ -227,12 +227,9 @@ function init_CA {
 function init_cert {
     if [[ ! -r $DEVSTACK_CERT ]]; then
         if [[ -n "$TLS_IP" ]]; then
-            if python3_enabled; then
-                TLS_IP="IP:$TLS_IP"
-            else
-                # Lie to let incomplete match routines work with python2
-                # see https://bugs.python.org/issue23239
-                TLS_IP="DNS:$TLS_IP,IP:$TLS_IP"
+            TLS_IP="IP:$TLS_IP"
+            if [[ -n "$HOST_IPV6" ]]; then
+                TLS_IP="$TLS_IP,IP:$HOST_IPV6"
             fi
         fi
         make_cert $INT_CA_DIR $DEVSTACK_CERT_NAME $DEVSTACK_HOSTNAME "$TLS_IP"
@@ -252,7 +249,11 @@ function make_cert {
 
     if [ "$common_name" != "$SERVICE_HOST" ]; then
         if is_ipv4_address "$SERVICE_HOST" ; then
-            alt_names="$alt_names,IP:$SERVICE_HOST"
+            if [[ -z "$alt_names" ]]; then
+                alt_names="IP:$SERVICE_HOST"
+            else
+                alt_names="$alt_names,IP:$SERVICE_HOST"
+            fi
         fi
     fi
 
@@ -366,8 +367,7 @@ function deploy_int_CA {
 function fix_system_ca_bundle_path {
     if is_service_enabled tls-proxy; then
         local capath
-        local python_cmd=${1:-python}
-        capath=$($python_cmd -c $'try:\n from requests import certs\n print (certs.where())\nexcept ImportError: pass')
+        capath=$(python3 -c $'try:\n from requests import certs\n print (certs.where())\nexcept ImportError: pass')
 
         if [[ ! $capath == "" && ! $capath =~ ^/etc/.* && ! -L $capath ]]; then
             if is_fedora; then
@@ -568,14 +568,6 @@ EOF
     done
     enable_apache_site $b_service
     restart_apache_server
-}
-
-# Follow TLS proxy
-function follow_tls_proxy {
-    sudo touch /var/log/$APACHE_NAME/tls-proxy_error.log
-    tail_log tls-error /var/log/$APACHE_NAME/tls-proxy_error.log
-    sudo touch /var/log/$APACHE_NAME/tls-proxy_access.log
-    tail_log tls-proxy /var/log/$APACHE_NAME/tls-proxy_access.log
 }
 
 # Cleanup Functions

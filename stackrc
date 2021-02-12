@@ -65,11 +65,11 @@ if ! isset ENABLED_SERVICES ; then
     # Keystone - nothing works without keystone
     ENABLED_SERVICES=key
     # Nova - services to support libvirt based openstack clouds
-    ENABLED_SERVICES+=,n-api,n-cpu,n-cond,n-sch,n-novnc,n-cauth,n-api-meta
+    ENABLED_SERVICES+=,n-api,n-cpu,n-cond,n-sch,n-novnc,n-api-meta
     # Placement service needed for Nova
     ENABLED_SERVICES+=,placement-api,placement-client
     # Glance services needed for Nova
-    ENABLED_SERVICES+=,g-api,g-reg
+    ENABLED_SERVICES+=,g-api
     # Cinder
     ENABLED_SERVICES+=,c-sch,c-api,c-vol
     # Neutron
@@ -89,6 +89,15 @@ ENABLE_HTTPD_MOD_WSGI_SERVICES=True
 # Set the default Nova APIs to enable
 NOVA_ENABLED_APIS=osapi_compute,metadata
 
+# allow local overrides of env variables, including repo config
+if [[ -f $RC_DIR/localrc ]]; then
+    # Old-style user-supplied config
+    source $RC_DIR/localrc
+elif [[ -f $RC_DIR/.localrc.auto ]]; then
+    # New-style user-supplied config extracted from local.conf
+    source $RC_DIR/.localrc.auto
+fi
+
 # CELLSV2_SETUP - how we should configure services with cells v2
 #
 # - superconductor - this is one conductor for the api services, and
@@ -100,9 +109,7 @@ CELLSV2_SETUP=${CELLSV2_SETUP:-"superconductor"}
 # Set the root URL for Horizon
 HORIZON_APACHE_ROOT="/dashboard"
 
-# Whether to use SYSTEMD to manage services, we only do this from
-# Queens forward.
-USE_SYSTEMD="True"
+# Whether to use user specific units for running services or global ones.
 USER_UNITS=$(trueorfalse False USER_UNITS)
 if [[ "$USER_UNITS" == "True" ]]; then
     SYSTEMD_DIR="$HOME/.local/share/systemd/user"
@@ -127,37 +134,17 @@ if [[ -r $RC_DIR/.localrc.password ]]; then
 fi
 
 # Control whether Python 3 should be used at all.
-export USE_PYTHON3=$(trueorfalse False USE_PYTHON3)
+# TODO(frickler): Drop this when all consumers are fixed
+export USE_PYTHON3=True
 
-# Explicitly list services not to run under Python 3. See
-# disable_python3_package to edit this variable.
-export DISABLED_PYTHON3_PACKAGES="swift"
-
-# When Python 3 is supported by an application, adding the specific
-# version of Python 3 to this variable will install the app using that
-# version of the interpreter instead of 2.7.
+# Adding the specific version of Python 3 to this variable will install
+# the app using that version of the interpreter instead of just 3.
 _DEFAULT_PYTHON3_VERSION="$(_get_python_version python3)"
-export PYTHON3_VERSION=${PYTHON3_VERSION:-${_DEFAULT_PYTHON3_VERSION:-3.5}}
-
-# Just to be more explicit on the Python 2 version to use.
-_DEFAULT_PYTHON2_VERSION="$(_get_python_version python2)"
-export PYTHON2_VERSION=${PYTHON2_VERSION:-${_DEFAULT_PYTHON2_VERSION:-2.7}}
+export PYTHON3_VERSION=${PYTHON3_VERSION:-${_DEFAULT_PYTHON3_VERSION:-3}}
 
 # Create a virtualenv with this
-if [[ ${USE_PYTHON3} == True ]]; then
-    export VIRTUALENV_CMD="python3 -m venv"
-else
-    export VIRTUALENV_CMD="virtualenv "
-fi
-
-# allow local overrides of env variables, including repo config
-if [[ -f $RC_DIR/localrc ]]; then
-    # Old-style user-supplied config
-    source $RC_DIR/localrc
-elif [[ -f $RC_DIR/.localrc.auto ]]; then
-    # New-style user-supplied config extracted from local.conf
-    source $RC_DIR/.localrc.auto
-fi
+# Use the built-in venv to avoid more dependencies
+export VIRTUALENV_CMD="python3 -m venv"
 
 # Default for log coloring is based on interactive-or-not.
 # Baseline assumption is that non-interactive invocations are for CI,
@@ -237,10 +224,10 @@ WSGI_MODE=${WSGI_MODE:-"uwsgi"}
 # ------------
 
 # Base GIT Repo URL
-GIT_BASE=${GIT_BASE:-https://git.openstack.org}
+GIT_BASE=${GIT_BASE:-https://opendev.org}
 
 # The location of REQUIREMENTS once cloned
-REQUIREMENTS_DIR=$DEST/requirements
+REQUIREMENTS_DIR=${REQUIREMENTS_DIR:-$DEST/requirements}
 
 # Which libraries should we install from git instead of using released
 # versions on pypi?
@@ -258,7 +245,7 @@ REQUIREMENTS_DIR=$DEST/requirements
 # Setting the variable to 'ALL' will activate the download for all
 # libraries.
 
-DEVSTACK_SERIES="train"
+DEVSTACK_SERIES="wallaby"
 
 ##############
 #
@@ -285,10 +272,6 @@ KEYSTONE_BRANCH=${KEYSTONE_BRANCH:-$TARGET_BRANCH}
 # neutron service
 NEUTRON_REPO=${NEUTRON_REPO:-${GIT_BASE}/openstack/neutron.git}
 NEUTRON_BRANCH=${NEUTRON_BRANCH:-$TARGET_BRANCH}
-
-# neutron fwaas service
-NEUTRON_FWAAS_REPO=${NEUTRON_FWAAS_REPO:-${GIT_BASE}/openstack/neutron-fwaas.git}
-NEUTRON_FWAAS_BRANCH=${NEUTRON_FWAAS_BRANCH:-$TARGET_BRANCH}
 
 # compute service
 NOVA_REPO=${NOVA_REPO:-${GIT_BASE}/openstack/nova.git}
@@ -498,8 +481,8 @@ GITREPO["tooz"]=${TOOZ_REPO:-${GIT_BASE}/openstack/tooz.git}
 GITBRANCH["tooz"]=${TOOZ_BRANCH:-$TARGET_BRANCH}
 
 # pbr drives the setuptools configs
-GITREPO["pbr"]=${PBR_REPO:-${GIT_BASE}/openstack-dev/pbr.git}
-GITBRANCH["pbr"]=${PBR_BRANCH:-$TARGET_BRANCH}
+GITREPO["pbr"]=${PBR_REPO:-${GIT_BASE}/openstack/pbr.git}
+GITBRANCH["pbr"]=${PBR_BRANCH:-$BRANCHLESS_TARGET_BRANCH}
 
 
 ##################
@@ -554,7 +537,7 @@ GITDIR["ironic-lib"]=$DEST/ironic-lib
 
 # diskimage-builder tool
 GITREPO["diskimage-builder"]=${DIB_REPO:-${GIT_BASE}/openstack/diskimage-builder.git}
-GITBRANCH["diskimage-builder"]=${DIB_BRANCH:-$TARGET_BRANCH}
+GITBRANCH["diskimage-builder"]=${DIB_BRANCH:-$BRANCHLESS_TARGET_BRANCH}
 GITDIR["diskimage-builder"]=$DEST/diskimage-builder
 
 # neutron-lib library containing neutron stable non-REST interfaces
@@ -565,6 +548,11 @@ GITDIR["neutron-lib"]=$DEST/neutron-lib
 # os-traits library for resource provider traits in the placement service
 GITREPO["os-traits"]=${OS_TRAITS_REPO:-${GIT_BASE}/openstack/os-traits.git}
 GITBRANCH["os-traits"]=${OS_TRAITS_BRANCH:-$TARGET_BRANCH}
+
+# ovsdbapp used by neutron
+GITREPO["ovsdbapp"]=${OVSDBAPP_REPO:-${GIT_BASE}/openstack/ovsdbapp.git}
+GITBRANCH["ovsdbapp"]=${OVSDBAPP_BRANCH:-$TARGET_BRANCH}
+GITDIR["ovsdbapp"]=$DEST/ovsdbapp
 
 ##################
 #
@@ -603,7 +591,7 @@ IRONIC_PYTHON_AGENT_BRANCH=${IRONIC_PYTHON_AGENT_BRANCH:-$TARGET_BRANCH}
 
 # a websockets/html5 or flash powered VNC console for vm instances
 NOVNC_REPO=${NOVNC_REPO:-https://github.com/novnc/noVNC.git}
-NOVNC_BRANCH=${NOVNC_BRANCH:-v1.0.0}
+NOVNC_BRANCH=${NOVNC_BRANCH:-v1.1.0}
 
 # a websockets/html5 or flash powered SPICE console for vm instances
 SPICE_REPO=${SPICE_REPO:-http://anongit.freedesktop.org/git/spice/spice-html5.git}
@@ -625,6 +613,7 @@ VIRT_DRIVER=${VIRT_DRIVER:-$DEFAULT_VIRT_DRIVER}
 case "$VIRT_DRIVER" in
     ironic|libvirt)
         LIBVIRT_TYPE=${LIBVIRT_TYPE:-kvm}
+        LIBVIRT_CPU_MODE=${LIBVIRT_CPU_MODE:-none}
         if [[ "$os_VENDOR" =~ (Debian|Ubuntu) ]]; then
             # The groups change with newer libvirt. Older Ubuntu used
             # 'libvirtd', but now uses libvirt like Debian. Do a quick check
@@ -656,9 +645,6 @@ case "$VIRT_DRIVER" in
         ;;
 esac
 
-# By default, devstack will use Ubuntu Cloud Archive.
-ENABLE_UBUNTU_CLOUD_ARCHIVE=$(trueorfalse True ENABLE_UBUNTU_CLOUD_ARCHIVE)
-
 # Images
 # ------
 
@@ -681,7 +667,7 @@ ENABLE_UBUNTU_CLOUD_ARCHIVE=$(trueorfalse True ENABLE_UBUNTU_CLOUD_ARCHIVE)
 #IMAGE_URLS="http://smoser.brickies.net/ubuntu/ttylinux-uec/ttylinux-uec-amd64-11.2_2.6.35-15_1.tar.gz" # old ttylinux-uec image
 #IMAGE_URLS="http://download.cirros-cloud.net/${CIRROS_VERSION}/cirros-${CIRROS_VERSION}-${CIRROS_ARCH}-disk.img" # cirros full disk image
 
-CIRROS_VERSION=${CIRROS_VERSION:-"0.4.0"}
+CIRROS_VERSION=${CIRROS_VERSION:-"0.5.1"}
 CIRROS_ARCH=${CIRROS_ARCH:-"x86_64"}
 
 # Set default image based on ``VIRT_DRIVER`` and ``LIBVIRT_TYPE``, either of
@@ -770,6 +756,10 @@ ETCD_DOWNLOAD_LOCATION=$ETCD_DOWNLOAD_URL/$ETCD_VERSION/$ETCD_DOWNLOAD_FILE
 # etcd is always required, so place it into list of pre-cached downloads
 EXTRA_CACHE_URLS+=",$ETCD_DOWNLOAD_LOCATION"
 
+# Cache settings
+CACHE_BACKEND=${CACHE_BACKEND:-"dogpile.cache.memcached"}
+MEMCACHE_SERVERS=${MEMCACHE_SERVERS:-"localhost:11211"}
+
 # Detect duplicate values in IMAGE_URLS
 for image_url in ${IMAGE_URLS//,/ }; do
     if [ $(echo "$IMAGE_URLS" | grep -o -F "$image_url" | wc -l) -gt 1 ]; then
@@ -814,15 +804,6 @@ SERVICE_GRACEFUL_SHUTDOWN_TIMEOUT=${SERVICE_GRACEFUL_SHUTDOWN_TIMEOUT:-5}
 # Service graceful shutdown timeout
 WORKER_TIMEOUT=${WORKER_TIMEOUT:-90}
 
-# Choose DNF on RedHat/Fedora platforms with it, or otherwise default
-# to YUM.  Can remove this when only dnf is supported (i.e. centos7
-# disappears)
-if [[ -e /usr/bin/dnf ]]; then
-    YUM=${YUM:-dnf}
-else
-    YUM=${YUM:-yum}
-fi
-
 # Common Configuration
 # --------------------
 
@@ -846,7 +827,6 @@ ENABLE_DEBUG_LOG_LEVEL=$(trueorfalse True ENABLE_DEBUG_LOG_LEVEL)
 FLOATING_RANGE=${FLOATING_RANGE:-172.24.4.0/24}
 IPV4_ADDRS_SAFE_TO_USE=${IPV4_ADDRS_SAFE_TO_USE:-10.0.0.0/22}
 FIXED_RANGE=${FIXED_RANGE:-$IPV4_ADDRS_SAFE_TO_USE}
-FIXED_NETWORK_SIZE=${FIXED_NETWORK_SIZE:-256}
 HOST_IP_IFACE=${HOST_IP_IFACE:-}
 HOST_IP=${HOST_IP:-}
 HOST_IPV6=${HOST_IPV6:-}
